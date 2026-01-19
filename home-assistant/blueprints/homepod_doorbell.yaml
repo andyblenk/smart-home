@@ -1,0 +1,53 @@
+blueprint:
+  name: HomePods als Türklingel
+  description: "Spielt einen Klingelton auf HomePods ab, wenn die Türklingel gedrückt wird."
+  domain: automation
+  input:
+    doorbell_trigger:
+      name: Türklingel-Trigger
+      description: "Das Gerät, das als Türklingel fungiert. (z. B. Button oder Bewegungssensor)"
+      selector:
+        entity:
+          domain:
+            - binary_sensor
+            - device_tracker
+            - sensor
+    media_players:
+      name: HomePods oder AirPlay-Lautsprecher
+      description: "Die HomePods, die den Klingelton abspielen sollen."
+      selector:
+        entity:
+          domain: media_player
+          multiple: true
+    volume:
+      name: Lautstärke
+      description: "Die Lautstärke des Klingeltons (0.1 - 1.0)"
+      default: 0.5
+      selector:
+        number:
+          min: 0.1
+          max: 1.0
+          step: 0.1
+          unit_of_measurement: "Lautstärke"
+    ringtone:
+      name: Klingelton
+      description: "Pfad zur MP3-Datei für den Klingelton. Standard: /media/local/doorbell.mp3"
+      default: "/media/local/doorbell.mp3"
+      selector:
+        text:
+
+mode: parallel
+max: 10
+
+trigger:
+  - platform: state
+    entity_id: !input doorbell_trigger
+    to: "on"
+
+action:
+  - service: media_player.play_media
+    target:
+      entity_id: !input media_players
+    data:
+      media_content_id: !input ringtone
+      media_content_type: "music"
