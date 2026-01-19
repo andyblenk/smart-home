@@ -13,6 +13,8 @@ Requires an `input_select` with values `auto`, `on`, `off` to control the mode:
 - `on`: always on
 - `off`: always off (motion ignored)
 
+Supports multiple motion sensors and multiple lights that can be switched together.
+
 Inputs:
 - Motion sensors (binary_sensor/switch)
 - Light switches
