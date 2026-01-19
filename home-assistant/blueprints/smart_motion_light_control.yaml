@@ -1,0 +1,162 @@
+blueprint:
+  name: "Smarte Lichtsteuerung bei Bewegung"
+  description: "Schaltet das Licht basierend auf Bewegung und Lichtverhältnissen ein."
+  domain: automation
+  input:
+    light_switch:
+      name: "Lichter"
+      description: "Lichter, die gesteuert werden sollen"
+      selector:
+        entity:
+          domain: switch
+          multiple: true
+    motion_sensors:
+      name: "Bewegungssensoren"
+      description: "Liste der Bewegungssensoren"
+      selector:
+        entity:
+          domain:
+            - binary_sensor
+            - switch
+          multiple: true
+    lux_sensor:
+      name: "Helligkeitssensor"
+      description: "Sensor für die Umgebungshelligkeit"
+      selector:
+        entity:
+          domain: sensor
+    lux_threshold:
+      name: "Helligkeitsgrenze"
+      description: "Ab welcher Helligkeit (in Lux) das Licht nicht mehr angeht"
+      default: 2000
+      selector:
+        number:
+          min: 0
+          max: 10000
+          step: 10
+          unit_of_measurement: "lx"
+    light_mode:
+      name: "Licht-Modus Entität"
+      description: "Entity, welche den Licht-Modus ('immer an', 'immer aus', 'auto') angibt."
+      selector:
+        entity:
+          domain: input_select
+    auto_state:
+      name: "Licht-Modus für 'auto'"
+      description: "Definiere den Status für den 'auto' Modus"
+      selector:
+        text: {}
+      default: "auto"
+    on_state:
+      name: "Licht-Modus für 'immer-an'"
+      description: "Definiere den Status für den 'immer-an' Modus"
+      selector:
+        text: {}
+      default: "an"
+    off_state:
+      name: "Licht-Modus für 'immer-aus'"
+      description: "Definiere den Status für den 'immer-aus' Modus"
+      selector:
+        text: {}
+      default: "aus"
+    timer_entity:
+      name: "Timer für das Licht"
+      description: "Wähle die Timer-Entität aus, die für das automatische Ausschalten genutzt werden soll"
+      selector:
+        entity:
+          domain: timer
+    off_timer:
+      name: "Licht automatisch ausschalten (Sekunden)"
+      description: "Dauer, nach der das Licht ausgeschaltet wird, falls keine Bewegung erkannt wird."
+      default: 30
+      selector:
+        number:
+          min: 10
+          max: 600
+          step: 5
+          unit_of_measurement: "s"
+    off_timer_lux:
+      name: "Licht Abklingzeit Lux (Sekdunden)"
+      description: "Licht nach auto-ausschalten unabhängig von Lux wieder einschalten. Abklingzeit."
+      default: 60
+      selector:
+        number:
+          min: 10
+          max: 600
+          step: 5
+          unit_of_measurement: "s"
+
+mode: queued
+max: 10
+
+trigger:
+  - platform: state
+    entity_id: !input motion_sensors
+    to: "on"
+  - platform: state
+    entity_id: !input timer_entity
+    to: "idle"
+  - platform: state
+    entity_id: !input light_mode
+
+condition: []
+
+action:
+  - choose:
+
+      # if always-on then just turn on the lights
+      - conditions:
+          - condition: state
+            entity_id: !input light_mode
+            state: !input on_state
+        sequence:
+          - service: switch.turn_on
+            target:
+              entity_id: !input light_switch
+
+      # if 'auto' then check lux and motion -> then turn on
+      - conditions:
+          - condition: state
+            entity_id: !input light_mode
+            state: !input auto_state
+          - or: # lux nur wenn Licht aus ist, da sonst das Licht die Leuchtquelle war.
+            - condition: state  
+              entity_id: !input timer_entity
+              state: "active"
+            - condition: state
+              entity_id: !input lux_sensor
+              state: "unknown"
+            - condition: numeric_state
+              entity_id: !input lux_sensor
+              below: !input lux_threshold
+          - condition: state
+            entity_id: !input motion_sensors
+            state: "on"
+            match: any
+        sequence:
+          - service: switch.turn_on
+            target:
+              entity_id: !input light_switch
+          - service: timer.start
+            target:
+              entity_id: !input timer_entity
+            data:
+              duration: !input off_timer
+
+    # turn off if nothing else matches
+    default:
+      - choose:
+          - conditions:
+              - condition: state
+                entity_id: !input light_switch
+                state: "on"
+                match: any
+            sequence:
+              - service: timer.start
+                target:
+                  entity_id: !input timer_entity
+                data:
+                  duration: !input off_timer_lux # so eine Art Abklingzeit in der die Lux dann nicht berücksichtigt werden.
+      - service: switch.turn_off
+        target:
+          entity_id: !input light_switch
